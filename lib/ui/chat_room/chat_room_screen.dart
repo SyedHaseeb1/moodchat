@@ -12,11 +12,13 @@ import 'chat_state.dart';
 class ChatRoomScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
+  final String conversationId;
 
   const ChatRoomScreen({
     super.key,
     required this.receiverId,
     required this.receiverName,
+    required this.conversationId,
   });
 
   @override
@@ -30,7 +32,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   @override
   void initState() {
     super.initState();
-    _chatCubit = sl<ChatCubit>()..loadMessages(widget.receiverId);
+    final myId = context.read<AuthCubit>().getUserId(); // Need to add this helper to AuthCubit
+    _chatCubit = sl<ChatCubit>()..loadMessages(widget.conversationId, myId);
   }
 
   @override
@@ -168,7 +171,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               onTap: () {
                 final content = _messageController.text.trim();
                 if (content.isNotEmpty) {
-                  _chatCubit.sendMessage(widget.receiverId, content);
+                  _chatCubit.sendMessage(widget.conversationId, widget.receiverId, content);
                   _messageController.clear();
                 }
               },

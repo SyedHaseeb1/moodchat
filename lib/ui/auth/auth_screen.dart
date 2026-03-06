@@ -7,6 +7,7 @@ import 'package:mood/core/app_text_styles.dart';
 import 'package:mood/core/glass_container.dart';
 import 'package:mood/core/ui_extensions.dart';
 import '../home/home_screen.dart';
+import '../profile/profile_setup_screen.dart';
 import 'auth_cubit.dart';
 import 'auth_state.dart';
 
@@ -115,6 +116,8 @@ class AuthScreen extends StatelessWidget {
         }
         if (state is AuthAuthenticated) {
           context.pushReplacement(const HomeScreen());
+        } else if (state is AuthNeedsProfileSetup) {
+          context.pushReplacement(ProfileSetupScreen(user: state.user));
         }
       },
       builder: (context, state) {

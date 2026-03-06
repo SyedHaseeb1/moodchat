@@ -103,8 +103,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildSettingsTile(
                       icon: Icons.alternate_email,
                       title: 'Username',
-                      subtitle: state.user.username != null ? '@${state.user.username}' : 'Not set',
-                      onTap: null, // Username typically handled during registration or special flow
+                      subtitle: state.user.username != null ? '@${state.user.username}' : 'Set username',
+                      onTap: () => _showEditDialog(context, 'Username', state.user.username ?? '', (val) => _profileCubit.updateUsername(val)),
                     ),
                     _buildSettingsTile(
                       icon: Icons.info_outline,

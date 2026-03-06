@@ -9,10 +9,14 @@ class ChatCubit extends Cubit<ChatState> {
 
   ChatCubit(this._chatRepository) : super(ChatInitial());
 
-  void loadMessages(String otherUserId) {
+  void loadMessages(String conversationId, String myUserId) {
     emit(ChatLoading());
     _messageSubscription?.cancel();
-    _messageSubscription = _chatRepository.getMessages(otherUserId).listen(
+    
+    // Mark as read when entering the chat
+    _chatRepository.markAsRead(conversationId, myUserId);
+    
+    _messageSubscription = _chatRepository.getMessages(conversationId).listen(
       (messages) {
         emit(ChatLoaded(messages));
       },
@@ -22,9 +26,9 @@ class ChatCubit extends Cubit<ChatState> {
     );
   }
 
-  Future<void> sendMessage(String receiverId, String content) async {
+  Future<void> sendMessage(String conversationId, String receiverId, String content) async {
     try {
-      await _chatRepository.sendMessage(receiverId, content);
+      await _chatRepository.sendMessage(conversationId, receiverId, content);
     } catch (e) {
       emit(ChatError(e.toString()));
     }

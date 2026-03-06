@@ -7,6 +7,7 @@ import 'package:mood/ui/auth/auth_cubit.dart';
 import 'package:mood/ui/auth/auth_state.dart';
 import 'package:mood/ui/auth/auth_screen.dart';
 import 'package:mood/ui/home/home_screen.dart';
+import 'package:mood/ui/profile/profile_setup_screen.dart';
 import 'package:mood/core/ui_extensions.dart';
 
 import '../core/app_colors.dart';
@@ -36,6 +37,8 @@ class _SplashScreenState extends State<SplashScreen> {
     final state = context.read<AuthCubit>().state;
     if (state is AuthAuthenticated) {
       context.pushReplacement(const HomeScreen());
+    } else if (state is AuthNeedsProfileSetup) {
+      context.pushReplacement(ProfileSetupScreen(user: state.user));
     } else {
       context.pushReplacement(const AuthScreen());
     }

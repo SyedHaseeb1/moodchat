@@ -16,7 +16,7 @@ class SupabaseProfileRepository implements ProfileRepository {
           .select()
           .eq('id', userId)
           .maybeSingle(); // Better than .single() as it won't throw if not found
-      
+
       if (data == null) {
         throw 'Profile not found';
       }
@@ -42,6 +42,36 @@ class SupabaseProfileRepository implements ProfileRepository {
   }
 
   @override
+  Future<bool> isUsernameAvailable(String username) async {
+    try {
+      final response = await _client
+          .from('profiles')
+          .select('username')
+          .eq('username', username)
+          .maybeSingle();
+      return response == null;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  @override
+  Future<List<UserModel>> searchUsers(String query) async {
+    try {
+      final data = await _client
+          .from('profiles')
+          .select()
+          .or('username.ilike.%$query%,full_name.ilike.%$query%')
+          .limit(20);
+
+      return (data as List).map((json) => UserModel.fromJson(json)).toList();
+    } catch (e, stack) {
+      AppLogger.e('Error searching users', e, stack);
+      return [];
+    }
+  }
+
+  @override
   Stream<UserModel> watchProfile(String userId) {
     return _client
         .from('profiles')
@@ -55,5 +85,20 @@ class SupabaseProfileRepository implements ProfileRepository {
           }
           return UserModel.fromJson(data.first);
         });
+  }
+
+  @override
+  Future<void> updateOnlineStatus(String userId, bool isOnline) async {
+    try {
+      await _client
+          .from('profiles')
+          .update({
+            'is_online': isOnline,
+            'last_seen': DateTime.now().toIso8601String(),
+          })
+          .eq('id', userId);
+    } catch (e) {
+      AppLogger.e('Error updating online status', e);
+    }
   }
 }

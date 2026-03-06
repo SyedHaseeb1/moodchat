@@ -6,6 +6,8 @@ class UserModel extends Equatable {
   final String? username;
   final String? fullName;
   final String? bio;
+  final String? avatarUrl;
+  final String? website;
   final String? moodStatus;
   final bool isOnline;
   final DateTime? lastSeen;
