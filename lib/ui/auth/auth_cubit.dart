@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/logger.dart';
 import '../../domain/repositories/auth_repository.dart';
 import 'auth_state.dart';
 
@@ -42,6 +43,24 @@ class AuthCubit extends Cubit<AuthState> {
         emit(const AuthError('Registration failed.'));
       }
     } catch (e) {
+      emit(AuthError(e.toString()));
+    }
+  }
+
+  Future<void> signInWithGoogle() async {
+    AppLogger.d('AuthCubit: Requesting Google Sign-In');
+    emit(AuthLoading());
+    try {
+      final user = await _authRepository.signInWithGoogle();
+      if (user != null) {
+        AppLogger.i('AuthCubit: Google Sign-In Success');
+        emit(AuthAuthenticated(user));
+      } else {
+        AppLogger.w('AuthCubit: Google Sign-In returned null');
+        emit(AuthUnauthenticated());
+      }
+    } catch (e) {
+      AppLogger.e('AuthCubit: Google Sign-In Error', e);
       emit(AuthError(e.toString()));
     }
   }
