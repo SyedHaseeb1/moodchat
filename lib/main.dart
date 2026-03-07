@@ -11,10 +11,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:mood/core/app_colors.dart';
 import 'package:mood/core/logger.dart';
+import 'package:mood/core/presence_service.dart';
 import 'package:mood/ui/SplashScreen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-import 'domain/repositories/profile_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,14 +58,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    final authCubit = sl<AuthCubit>();
-    final userId = authCubit.getUserId();
-    if (userId.isEmpty) return;
-
+    final presenceService = sl<PresenceService>();
     if (state == AppLifecycleState.resumed) {
-      sl<ProfileRepository>().updateOnlineStatus(userId, true);
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      sl<ProfileRepository>().updateOnlineStatus(userId, false);
+      // App came back to foreground — immediately resume pinging
+      presenceService.resume();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // App went to background — pause pinging (40s threshold handles offline)
+      presenceService.pause();
     }
   }
 

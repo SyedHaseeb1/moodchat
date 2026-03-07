@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/logger.dart';
+import '../../core/presence_service.dart';
 import '../../domain/models/user_model.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/profile_repository.dart';
@@ -10,9 +11,14 @@ class AuthCubit extends Cubit<AuthState> {
   final AuthRepository _authRepository;
   final ProfileRepository _profileRepository;
   final UserLocalDataSource _localDataSource;
+  final PresenceService _presenceService;
 
-  AuthCubit(this._authRepository, this._profileRepository, this._localDataSource)
-    : super(AuthInitial()) {
+  AuthCubit(
+    this._authRepository,
+    this._profileRepository,
+    this._localDataSource,
+    this._presenceService,
+  ) : super(AuthInitial()) {
     checkInitialAuth();
   }
 
@@ -43,10 +49,10 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       final profile = await _profileRepository.getProfile(user.id);
       final fullUser = profile.copyWith(email: user.email);
-      
-      // Update online status
-      await _profileRepository.updateOnlineStatus(user.id, true);
-      
+
+      // Start the presence heartbeat so other users see us as online
+      _presenceService.start(user.id);
+
       // Save to local storage for offline access
       await _localDataSource.saveUser(fullUser);
 
@@ -119,10 +125,8 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   Future<void> signOut() async {
-    final userId = getUserId();
-    if (userId.isNotEmpty) {
-      await _profileRepository.updateOnlineStatus(userId, false);
-    }
+    // Stop heartbeat — our last_seen won't update anymore → offline after 40s
+    _presenceService.stop();
     await _authRepository.signOut();
     await _localDataSource.clearUser();
     emit(AuthUnauthenticated());

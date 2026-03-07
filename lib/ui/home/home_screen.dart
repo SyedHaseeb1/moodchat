@@ -1,26 +1,50 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mood/core/app_colors.dart';
 import 'package:mood/core/app_text_styles.dart';
 import 'package:mood/ui/auth/auth_cubit.dart';
 
+import '../../core/service_locator.dart';
 import '../../core/ui_extensions.dart';
+import '../../domain/models/conversation_model.dart';
+import '../../domain/models/user_model.dart';
 import '../../domain/repositories/chat_repository.dart';
+import '../../domain/repositories/profile_repository.dart';
 import '../auth/auth_state.dart';
 import '../chat_room/chat_room_screen.dart';
-import '../profile/profile_screen.dart';
-import '../friends/people_discovery_screen.dart';
-import '../friends/qr_profile_screen.dart';
 import '../friends/friendship_cubit.dart';
 import '../friends/handshake_cubit.dart';
+import '../friends/people_discovery_screen.dart';
+import '../friends/qr_profile_screen.dart';
+import '../profile/profile_screen.dart';
 import 'conversation_cubit.dart';
-import '../../domain/models/conversation_model.dart';
-import '../../core/service_locator.dart';
-import '../../domain/repositories/profile_repository.dart';
-import '../../domain/models/user_model.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  /// Fires every 30 s to re-evaluate `isCurrentlyOnline` (pure clock math, no DB call).
+  late final Timer _onlinePollTimer;
+  int _tick = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _onlinePollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _tick++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _onlinePollTimer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,29 +54,27 @@ class HomeScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => sl<FriendshipCubit>()..loadFriendships(user?.id ?? '')),
-        BlocProvider(create: (_) => sl<ConversationCubit>()..loadConversations(user?.id ?? '')),
+        BlocProvider(
+          create: (_) => sl<ConversationCubit>()..loadConversations(user?.id ?? ''),
+        ),
       ],
       child: BlocListener<HandshakeCubit, HandshakeState>(
         listener: (context, state) async {
           if (state is HandshakeReceived) {
-            // Instant navigation logic
             final otherUserId = state.triggerUserId;
             final myId = context.read<AuthCubit>().getUserId();
-            
-            // 1. Force consume the event so it doesn't trigger twice
+
             context.read<HandshakeCubit>().consume(otherUserId);
-            
-            // 2. Resolve conversation and navigate
-            final conversationId = await sl<ChatRepository>().getOrCreateConversation(myId, otherUserId);
-            
-            // 3. Fetch profile for a better experience
+
+            final conversationId =
+                await sl<ChatRepository>().getOrCreateConversation(myId, otherUserId);
             final otherUser = await sl<ProfileRepository>().getProfile(otherUserId);
-            
-            // 4. Navigate instantly
+
             if (context.mounted) {
               context.push(ChatRoomScreen(
                 receiverId: otherUserId,
                 receiverName: otherUser.fullName ?? otherUser.username ?? 'New Friend',
+                avatarUrl: otherUser.avatarUrl?? "",
                 conversationId: conversationId,
               ));
             }
@@ -69,18 +91,14 @@ class HomeScreen extends StatelessWidget {
                 onTap: () => context.push(const ProfileScreen()),
                 child: CircleAvatar(
                   backgroundColor: AppColors.accentGlow.withOpacity(0.1),
-                  backgroundImage: user?.avatarUrl != null
-                      ? NetworkImage(user!.avatarUrl!)
-                      : null,
+                  backgroundImage:
+                      user?.avatarUrl != null ? NetworkImage(user!.avatarUrl!) : null,
                   child: user?.avatarUrl == null
                       ? Text(
                           user?.fullName?[0].toUpperCase() ??
                               user?.username?[0].toUpperCase() ??
                               'U',
-                          style: const TextStyle(
-                            color: AppColors.accentGlow,
-                            fontSize: 14,
-                          ),
+                          style: const TextStyle(color: AppColors.accentGlow, fontSize: 14),
                         )
                       : null,
                 ),
@@ -90,23 +108,17 @@ class HomeScreen extends StatelessWidget {
             centerTitle: true,
             actions: [
               IconButton(
-                icon: const Icon(
-                  Icons.person_add_outlined,
-                  color: Colors.white70,
-                ),
+                icon: const Icon(Icons.person_add_outlined, color: Colors.white70),
                 onPressed: () => context.push(const PeopleDiscoveryScreen()),
               ),
               Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(
-                    Icons.qr_code_scanner_outlined,
-                    color: Colors.white70,
-                  ),
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.qr_code_scanner_outlined, color: Colors.white70),
                   onPressed: () => Navigator.push(
-                    context,
+                    ctx,
                     MaterialPageRoute(
                       builder: (_) => BlocProvider.value(
-                        value: context.read<FriendshipCubit>(),
+                        value: ctx.read<FriendshipCubit>(),
                         child: const QRProfileScreen(),
                       ),
                     ),
@@ -137,11 +149,7 @@ class HomeScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                          Icons.message_outlined,
-                          size: 64,
-                          color: Colors.white10,
-                        ),
+                        const Icon(Icons.message_outlined, size: 64, color: Colors.white10),
                         const SizedBox(height: 16),
                         const Text(
                           'No conversations yet',
@@ -149,8 +157,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 24),
                         ElevatedButton.icon(
-                          onPressed: () =>
-                              context.push(const PeopleDiscoveryScreen()),
+                          onPressed: () => context.push(const PeopleDiscoveryScreen()),
                           icon: const Icon(Icons.search),
                           label: const Text('FIND FRIENDS'),
                           style: ElevatedButton.styleFrom(
@@ -162,27 +169,40 @@ class HomeScreen extends StatelessWidget {
                     ),
                   );
                 }
+
+                // The Supabase stream already re-emits sorted by lastMessageAt on every
+                // insert/update, so re-ordering happens automatically. The _tick key
+                // also forces a rebuild when the online-poll timer fires.
                 return ListView.builder(
+                  key: ValueKey(_tick),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: conversations.length,
                   itemBuilder: (context, index) {
                     final conv = conversations[index];
-                    final otherUserId = conv.user1Id == user?.id ? conv.user2Id : conv.user1Id;
-                    final unreadCount = conv.user1Id == user?.id ? conv.user1UnreadCount : conv.user2UnreadCount;
+                    final otherUserId =
+                        conv.user1Id == user?.id ? conv.user2Id : conv.user1Id;
+                    final unreadCount = conv.user1Id == user?.id
+                        ? conv.user1UnreadCount
+                        : conv.user2UnreadCount;
 
-                    return FutureBuilder<UserModel>(
-                      future: sl<ProfileRepository>().getProfile(otherUserId),
+                    // StreamBuilder keeps each row live: name, avatar, and online dot
+                    // update instantly when the profile row changes in Supabase.
+                    return StreamBuilder<UserModel>(
+                      stream: sl<ProfileRepository>().watchProfile(otherUserId),
                       builder: (context, snapshot) {
                         final otherUser = snapshot.data;
                         return _buildChatItem(
                           context,
+                          conv: conv,
                           name: otherUser?.fullName ?? otherUser?.username ?? '...',
                           id: otherUserId,
                           conversationId: conv.id,
                           lastMsg: conv.lastMessageText ?? 'No messages yet',
                           unreadCount: unreadCount,
-                          isOnline: otherUser?.isOnline ?? false,
-                          time: conv.lastMessageAt != null ? _formatTime(conv.lastMessageAt!) : '',
+                          isOnline: otherUser?.isCurrentlyOnline ?? false,
+                          time: conv.lastMessageAt != null
+                              ? _formatTime(conv.lastMessageAt!)
+                              : '',
                           avatarUrl: otherUser?.avatarUrl,
                         );
                       },
@@ -205,6 +225,7 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildChatItem(
     BuildContext context, {
+    required ConversationModel conv,
     required String name,
     required String id,
     required String conversationId,
@@ -218,6 +239,7 @@ class HomeScreen extends StatelessWidget {
       onTap: () => context.push(ChatRoomScreen(
         receiverId: id,
         receiverName: name,
+        avatarUrl: avatarUrl?? "",
         conversationId: conversationId,
       )),
       contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
@@ -230,10 +252,7 @@ class HomeScreen extends StatelessWidget {
             child: avatarUrl == null
                 ? Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      color: AppColors.accentGlow,
-                      fontSize: 20,
-                    ),
+                    style: const TextStyle(color: AppColors.accentGlow, fontSize: 20),
                   )
                 : null,
           ),
@@ -253,10 +272,7 @@ class HomeScreen extends StatelessWidget {
             ),
         ],
       ),
-      title: Text(
-        name,
-        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold),
-      ),
+      title: Text(name, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
       subtitle: Text(
         lastMsg,
         style: AppTextStyles.tagline.copyWith(
@@ -302,7 +318,6 @@ class HomeScreen extends StatelessWidget {
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final difference = now.difference(time);
-
     if (difference.inDays == 0) {
       return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
     } else if (difference.inDays < 7) {

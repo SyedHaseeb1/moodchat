@@ -123,12 +123,12 @@ class _SplashScreenState extends State<SplashScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          AppStrings.loading,
-          style: AppTextStyles.loading,
-        ).animate().fadeIn(delay: 1000.ms, duration: 800.ms),
+        // Text(
+        //   AppStrings.loading,
+        //   style: AppTextStyles.loading,
+        // ).animate().fadeIn(delay: 1000.ms, duration: 800.ms),
         const SizedBox(width: 8),
-        SpinKitPulse(color: AppColors.accentGlow.withOpacity(0.5), size: 40),
+        SpinKitPulse(color: AppColors.accentGlow.withOpacity(0.5), size: 100),
       ],
     );
   }

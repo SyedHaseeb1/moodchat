@@ -17,6 +17,7 @@ import '../ui/home/conversation_cubit.dart';
 import '../domain/repositories/friendship_repository.dart';
 import '../data/repositories/supabase_friendship_repository.dart';
 import '../data/datasources/user_local_data_source.dart';
+import 'presence_service.dart';
 
 final sl = GetIt.instance;
 
@@ -39,13 +40,23 @@ Future<void> initServiceLocator() async {
     () => SupabaseFriendshipRepository(sl<SupabaseClient>()),
   );
   sl.registerLazySingleton<UserLocalDataSource>(() => UserLocalDataSource());
+  sl.registerLazySingleton<PresenceService>(
+    () => PresenceService(sl<ProfileRepository>()),
+  );
 
   // Blocs/Cubits
   sl.registerFactory(
-    () => AuthCubit(sl<AuthRepository>(), sl<ProfileRepository>(), sl<UserLocalDataSource>()),
+    () => AuthCubit(
+      sl<AuthRepository>(),
+      sl<ProfileRepository>(),
+      sl<UserLocalDataSource>(),
+      sl<PresenceService>(),
+    ),
   );
   sl.registerFactory(() => ChatCubit(sl<ChatRepository>()));
-  sl.registerFactory(() => ProfileCubit(sl<ProfileRepository>(), sl<UserLocalDataSource>()));
+  sl.registerFactory(
+    () => ProfileCubit(sl<ProfileRepository>(), sl<UserLocalDataSource>()),
+  );
   sl.registerFactory(() => SearchCubit(sl<ProfileRepository>()));
   sl.registerFactory(() => FriendshipCubit(sl<FriendshipRepository>()));
   sl.registerFactory(() => HandshakeCubit(sl<ChatRepository>()));

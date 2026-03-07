@@ -101,4 +101,16 @@ class SupabaseProfileRepository implements ProfileRepository {
       AppLogger.e('Error updating online status', e);
     }
   }
+
+  @override
+  Future<void> updateLastSeen(String userId) async {
+    try {
+      await _client
+          .from('profiles')
+          .update({'last_seen': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', userId);
+    } catch (e) {
+      AppLogger.e('SupabaseProfileRepository: Error updating last_seen', e);
+    }
+  }
 }

@@ -14,6 +14,14 @@ class UserModel extends Equatable {
   final String? phoneNumber;
   final DateTime? updatedAt;
 
+  /// Derived online status based on last_seen timestamp.
+  /// Returns true if last_seen was within the last 40 seconds.
+  /// Use this instead of [isOnline] when displaying other users' status.
+  bool get isCurrentlyOnline {
+    if (lastSeen == null) return false;
+    return DateTime.now().difference(lastSeen!).inSeconds < 40;
+  }
+
   const UserModel({
     required this.id,
     this.email,

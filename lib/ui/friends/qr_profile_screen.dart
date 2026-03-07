@@ -11,6 +11,7 @@ import 'package:mood/ui/auth/auth_state.dart';
 import 'package:mood/ui/friends/friendship_cubit.dart';
 import 'package:mood/ui/chat_room/chat_room_screen.dart';
 import '../../domain/repositories/chat_repository.dart';
+import '../../domain/repositories/profile_repository.dart';
 import '../../core/service_locator.dart';
 import 'package:mood/core/logger.dart';
 
@@ -174,6 +175,9 @@ class _QRProfileScreenState extends State<QRProfileScreen> with SingleTickerProv
     // 3. Get/Create conversation (so I navigate)
     final conversationId = await sl<ChatRepository>().getOrCreateConversation(currentUserId, friendId);
 
+    // Fetch friend profile for the chat screen
+    final friendProfile = await sl<ProfileRepository>().getProfile(friendId);
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -181,11 +185,15 @@ class _QRProfileScreenState extends State<QRProfileScreen> with SingleTickerProv
           backgroundColor: Colors.greenAccent,
         ),
       );
+
+      // load the user for info
+
       
       // 4. Navigate to Chat instantly
       context.pushReplacement(ChatRoomScreen(
         receiverId: friendId,
-        receiverName: 'New Friend',
+        receiverName: friendProfile.fullName ?? friendProfile.username ?? 'New Friend',
+        avatarUrl: friendProfile.avatarUrl ?? '',
         conversationId: conversationId,
       ));
     }

@@ -12,12 +12,14 @@ import 'chat_state.dart';
 class ChatRoomScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
+  final String avatarUrl;
   final String conversationId;
 
   const ChatRoomScreen({
     super.key,
     required this.receiverId,
     required this.receiverName,
+    required this.avatarUrl,
     required this.conversationId,
   });
 
@@ -27,13 +29,35 @@ class ChatRoomScreen extends StatefulWidget {
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _messageController = TextEditingController();
+  final _scrollController = ScrollController();
   late final ChatCubit _chatCubit;
+  late final String _myId;
 
   @override
   void initState() {
     super.initState();
-    final myId = context.read<AuthCubit>().getUserId(); // Need to add this helper to AuthCubit
-    _chatCubit = sl<ChatCubit>()..loadMessages(widget.conversationId, myId);
+    _myId = context.read<AuthCubit>().getUserId();
+    _chatCubit = sl<ChatCubit>()..loadMessages(widget.conversationId, _myId);
+  }
+
+  @override
+  void dispose() {
+    _chatCubit.clearActiveChat();
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
@@ -59,21 +83,45 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       elevation: 0,
       leadingWidth: 70,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+        icon: const Icon(
+          Icons.arrow_back_ios_new,
+          color: Colors.white,
+          size: 20,
+        ),
         onPressed: () => context.pop(),
       ),
       title: Row(
         children: [
           CircleAvatar(
-            backgroundColor: AppColors.accentGlow.withOpacity(0.2),
-            child: Text(widget.receiverName[0].toUpperCase(), style: const TextStyle(color: AppColors.accentGlow)),
+            backgroundColor: AppColors.accentGlow.withOpacity(0.1),
+            backgroundImage: widget.avatarUrl.isNotEmpty
+                ? NetworkImage(widget.avatarUrl)
+                : null,
+            child: widget.avatarUrl.isEmpty
+                ? Text(
+                    widget.receiverName[0].toUpperCase(),
+                    style: const TextStyle(
+                      color: AppColors.accentGlow,
+                      fontSize: 14,
+                    ),
+                  )
+                : null,
           ),
           12.horizontalSpace,
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.receiverName, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
-              Text('End-to-end encrypted', style: AppTextStyles.tagline.copyWith(fontSize: 10, color: Colors.white54)),
+              Text(
+                widget.receiverName,
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'End-to-end encrypted',
+                style: AppTextStyles.tagline.copyWith(
+                  fontSize: 10,
+                  color: Colors.white54,
+                ),
+              ),
             ],
           ),
         ],
@@ -82,28 +130,55 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Widget _buildMessageList() {
-    return BlocBuilder<ChatCubit, ChatState>(
+    return BlocConsumer<ChatCubit, ChatState>(
+      listener: (context, state) {
+        // Scroll to bottom whenever new messages arrive
+        if (state is ChatLoaded) _scrollToBottom();
+      },
       builder: (context, state) {
         if (state is ChatLoading) {
-          return const Center(child: CircularProgressIndicator(color: AppColors.accentGlow));
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.accentGlow),
+          );
         }
         if (state is ChatError) {
-          return Center(child: Text(state.message, style: const TextStyle(color: Colors.red)));
+          return Center(
+            child: Text(
+              state.message,
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
         }
         if (state is ChatLoaded) {
           final messages = state.messages;
           if (messages.isEmpty) {
-            return Center(child: Text('No messages yet', style: AppTextStyles.tagline));
+            return Center(
+              child: Text('No messages yet', style: AppTextStyles.tagline),
+            );
           }
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            reverse: true, // Show latest at the bottom
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            reverse: true,
             itemCount: messages.length,
             itemBuilder: (context, index) {
               final msg = messages[messages.length - 1 - index];
-              final isMe = msg.senderId == context.read<AuthCubit>().state.props[0] /* Should check user id */;
-              // Note: AuthState props check is a bit brittle, ideally we have the user id directly accessible
-              return _buildMessageBubble(msg, isMe: msg.senderId != widget.receiverId);
+              final isMe = msg.senderId == _myId;
+
+              // Show date separator when day changes
+              final showDateSep =
+                  index == messages.length - 1 ||
+                  !_isSameDay(
+                    messages[messages.length - 1 - index].createdAt,
+                    messages[messages.length - 2 - index].createdAt,
+                  );
+
+              return Column(
+                children: [
+                  if (showDateSep) _buildDateSeparator(msg.createdAt),
+                  _buildMessageBubble(msg, isMe: isMe),
+                ],
+              );
             },
           );
         }
@@ -112,12 +187,45 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
+  Widget _buildDateSeparator(DateTime date) {
+    final now = DateTime.now();
+    String label;
+    if (_isSameDay(date, now)) {
+      label = 'Today';
+    } else if (_isSameDay(date, now.subtract(const Duration(days: 1)))) {
+      label = 'Yesterday';
+    } else {
+      label = '${date.day}/${date.month}/${date.year}';
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const Expanded(child: Divider(color: Colors.white12)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+          ),
+          const Expanded(child: Divider(color: Colors.white12)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageBubble(MessageModel message, {required bool isMe}) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: EdgeInsets.only(
+          left: 14,
+          right: isMe ? 8 : 14,
+          top: 10,
+          bottom: 8,
+        ),
         constraints: BoxConstraints(maxWidth: context.width * 0.75),
         decoration: BoxDecoration(
           color: isMe ? AppColors.accentGlow : Colors.white.withOpacity(0.08),
@@ -128,13 +236,82 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             bottomRight: Radius.circular(isMe ? 4 : 20),
           ),
         ),
-        child: Text(
-          message.content,
-          style: AppTextStyles.body.copyWith(
-            color: isMe ? AppColors.backgroundBottom : Colors.white,
-          ),
+        child: Column(
+          crossAxisAlignment: isMe
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message.content,
+              style: AppTextStyles.body.copyWith(
+                color: isMe ? AppColors.backgroundBottom : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _formatMsgTime(message.createdAt),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isMe
+                        ? AppColors.backgroundBottom.withOpacity(0.6)
+                        : Colors.white38,
+                  ),
+                ),
+                if (isMe) ...[
+                  const SizedBox(width: 4),
+                  _buildReceiptTick(message),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  /// Double-tick read receipt indicator (only shown on sender's bubbles).
+  ///
+  /// States:
+  /// • Sent     → single grey tick  (isRead = false, no receiver yet)
+  /// • Received → double grey ticks (message exists in DB, receiver got it)
+  /// • Read     → double blue ticks (isRead = true)
+  Widget _buildReceiptTick(MessageModel message) {
+    // If isRead = true → blue double tick
+    // If message is in DB (has id) → double grey tick (delivered/received)
+    // The "sent" single tick state is only meaningful immediately after sending
+    // before the stream returns the persisted row. Since we rely on the stream,
+    // all messages shown here are already in DB ⇒ at least "received".
+    final isRead = message.isRead;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // First tick
+        Icon(
+          Icons.check,
+          size: 14,
+          color: isRead
+              ? Colors.blue[300]
+              : AppColors.backgroundBottom.withOpacity(0.5),
+        ),
+        // Second tick (offset to the right → double check)
+        Positioned(
+          left: 5,
+          child: Icon(
+            Icons.check,
+            size: 14,
+            color: isRead
+                ? Colors.blue[300]
+                : AppColors.backgroundBottom.withOpacity(0.5),
+          ),
+        ),
+        // Spacer so the Stack has width
+        const SizedBox(width: 16),
+      ],
     );
   }
 
@@ -158,9 +335,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 child: TextField(
                   controller: _messageController,
                   style: const TextStyle(color: Colors.white),
+                  maxLines: null,
+                  textInputAction: TextInputAction.newline,
                   decoration: InputDecoration(
                     hintText: 'Type a message...',
-                    hintStyle: AppTextStyles.tagline.copyWith(color: Colors.white38),
+                    hintStyle: AppTextStyles.tagline.copyWith(
+                      color: Colors.white38,
+                    ),
                     border: InputBorder.none,
                   ),
                 ),
@@ -171,18 +352,39 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               onTap: () {
                 final content = _messageController.text.trim();
                 if (content.isNotEmpty) {
-                  _chatCubit.sendMessage(widget.conversationId, widget.receiverId, content);
+                  _chatCubit.sendMessage(
+                    widget.conversationId,
+                    widget.receiverId,
+                    content,
+                  );
                   _messageController.clear();
                 }
               },
-              child: const CircleAvatar(
-                backgroundColor: AppColors.accentGlow,
-                child: Icon(Icons.send, color: AppColors.backgroundBottom, size: 20),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  color: AppColors.accentGlow,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.send_rounded,
+                  color: AppColors.backgroundBottom,
+                  size: 20,
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _formatMsgTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }
